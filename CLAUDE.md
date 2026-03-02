@@ -85,7 +85,7 @@ No hay tests configurados actualmente en el proyecto.
 - Imports con alias `@/` en Next.js
 - Respuestas API siempre con estructura `{ data: T, error: string | null, meta? }`
 - Variables de entorno sólo desde `.env` (nunca hardcoded); en Bun usar `Bun.env.VAR`
-- Commits en formato Conventional Commits (`feat:`, `fix:`, `chore:`, etc.)
+- Commits en formato Conventional Commits con scope de app: `feat(web):`, `fix(api):`, `chore(root):`, etc.
 
 ---
 
@@ -136,6 +136,28 @@ Por defecto usar Server Components (sin `"use client"`). Agregar `"use client"` 
 - `apps/web` → `http://localhost:3000`
 - `apps/api` → `http://localhost:3001`
 - `apps/api` docs → `http://localhost:3001/docs`
+
+---
+
+## Flujo de Git
+
+Ramas permanentes:
+- `main` — producción, nunca se toca directamente
+- `develop` — rama de integración, base de todo el trabajo
+
+Flujo obligatorio para cada cambio:
+1. Crear rama desde `develop`: `git checkout -b feat/nombre` (o `fix/`, `chore/`)
+2. Hacer commits con scope correcto (ver Reglas de Código)
+3. Mergear a `develop` y subir: `git push origin develop`
+4. Para producción: `develop` → `main` (solo cuando esté estable)
+
+Scopes de commit según app:
+- `(web)` → cambios en `apps/web`
+- `(api)` → cambios en `apps/api`
+- `(root)` → cambios raíz (turbo, configs globales)
+- `(packages)` → cambios en paquetes compartidos
+
+**El agente nunca debe hacer push directo a `main`.**
 
 ---
 
