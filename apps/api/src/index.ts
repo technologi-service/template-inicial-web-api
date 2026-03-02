@@ -2,16 +2,18 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { loggerMiddleware } from "./middleware/logger";
-import { authMiddleware } from "./middleware/auth";
+import { betterAuthPlugin } from "./middleware/auth";
 import { healthRoute } from "./routes/health.route";
 
-const PORT = Number(Bun.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 export const app = new Elysia()
   .use(
     cors({
-      origin: Bun.env.NODE_ENV === "production" ? false : true,
+      origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      credentials: true,
+      allowedHeaders: ["Content-Type", "Authorization"],
     })
   )
   .use(
@@ -37,7 +39,7 @@ export const app = new Elysia()
     })
   )
   .use(loggerMiddleware)
-  .use(authMiddleware)
+  .use(betterAuthPlugin)
   .group("/api/v1", (app) => app.use(healthRoute))
   .onAfterResponse(({ log, set }) => {
     if (log) {

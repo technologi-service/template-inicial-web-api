@@ -32,6 +32,8 @@ celta/
 - **Frontend:** [Next.js 16](https://nextjs.org) — App Router, Server Components
 - **Estilos:** [Tailwind CSS v4](https://tailwindcss.com)
 - **Backend:** [Elysia](https://elysiajs.com) — framework TypeScript para Bun
+- **Auth:** [Better Auth](https://better-auth.com) — email + password
+- **Database:** [Neon Postgres](https://neon.tech) + [Drizzle ORM](https://orm.drizzle.team)
 - **Documentación API:** Swagger en `http://localhost:3001/docs`
 - **Lenguaje:** TypeScript estricto en todo el monorepo
 
@@ -133,6 +135,10 @@ cp apps/api/.env.example apps/api/.env
 |---|---|---|
 | `API_URL` | `web` | URL interna de la API (Server Components) |
 | `NEXT_PUBLIC_API_URL` | `web` | URL pública de la API (Client Components) |
+| `DATABASE_URL` | ambas | Conexión a Neon Postgres |
+| `BETTER_AUTH_SECRET` | ambas | Secret de 32+ chars para Better Auth |
+| `BETTER_AUTH_URL` | ambas | URL base de la app correspondiente |
+| `FRONTEND_URL` | `api` | URL del frontend (para CORS) |
 | `PORT` | `api` | Puerto del servidor (default: `3001`) |
 
 ---
