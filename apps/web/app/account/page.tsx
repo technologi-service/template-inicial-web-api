@@ -2,31 +2,31 @@
 
 import { authClient } from "@/lib/auth/client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-type Session = Awaited<ReturnType<typeof authClient.getSession>>;
 
 export default function AccountPage() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-
-  useEffect(() => {
-    authClient.getSession().then(setSession);
-  }, []);
+  const { data: session, isPending } = authClient.useSession();
 
   async function handleSignOut() {
-    await authClient.signOut();
-    router.push("/");
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/");
+        },
+      },
+    });
   }
 
-  const user = session?.data?.user;
+  const user = session?.user;
 
   return (
     <main className="min-h-screen flex items-center justify-center p-8">
       <div className="rounded-lg border p-8 w-full max-w-sm space-y-6">
         <h1 className="text-2xl font-bold">Mi cuenta</h1>
 
-        {user ? (
+        {isPending ? (
+          <p className="text-sm text-gray-500">Cargando sesión...</p>
+        ) : user ? (
           <div className="space-y-4">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -47,7 +47,7 @@ export default function AccountPage() {
             </button>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">Cargando sesión...</p>
+          <p className="text-sm text-gray-500">No se encontró la sesión</p>
         )}
       </div>
     </main>

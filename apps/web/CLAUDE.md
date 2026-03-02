@@ -1,9 +1,10 @@
-# apps/web — Next.js 15 Frontend
+# apps/web — Next.js 16 Frontend
 
 ## Stack
-- Framework: Next.js 15 (App Router)
+- Framework: Next.js 16 (App Router)
 - Language: TypeScript estricto
 - Estilos: Tailwind CSS v4
+- Auth: Better Auth (email + password)
 - Puerto: `http://localhost:3000`
 
 ---
@@ -12,18 +13,74 @@
 
 ```
 apps/web/
-├── app/              # Rutas (App Router)
-│   ├── layout.tsx    # Root layout
-│   ├── page.tsx      # Homepage (/)
-│   └── [ruta]/
-│       ├── page.tsx
-│       └── layout.tsx  (opcional)
-├── components/       # Componentes reutilizables
-│   ├── ui/           # Componentes genéricos (Button, Input, etc.)
-│   └── [feature]/    # Componentes de una feature específica
+├── app/                    # Rutas (App Router)
+│   ├── layout.tsx          # Root layout
+│   ├── page.tsx            # Homepage (/)
+│   ├── auth/               # Páginas de autenticación
+│   │   ├── sign-in/page.tsx
+│   │   └── sign-up/page.tsx
+│   ├── account/page.tsx    # Página protegida (requiere auth)
+│   └── api/
+│       └── (vacío)
+├── components/             # Componentes reutilizables
+│   ├── ui/                 # Componentes genéricos (Button, Input, etc.)
+│   └── [feature]/          # Componentes de una feature específica
 ├── lib/
-│   └── api.ts        # Cliente HTTP para la API
-└── app/globals.css   # Estilos globales + Tailwind
+│   ├── api.ts              # Cliente HTTP para la API REST
+│   └── auth/
+│       ├── server-fetch.ts # Helper para Server Components que llama a Elysia
+│       └── client.ts       # Cliente Better Auth apuntando a Elysia
+├── middleware.ts           # Protección de rutas (/account/*)
+└── app/globals.css         # Estilos globales + Tailwind
+```
+
+---
+
+## Autenticación (Better Auth)
+
+### Archivos de Auth
+
+| Archivo | Propósito |
+|---|---|
+| `lib/auth/server-fetch.ts` | Fetch helper para leer la sesión en Server Components delegando a Elysia |
+| `lib/auth/client.ts` | Cliente React configurado para apuntar a la API (`baseURL: :3001`) |
+| `middleware.ts` | Protege `/account/*` verificando la cookie de sesión |
+| `app/auth/sign-in/page.tsx` | Formulario de login (email + password) |
+| `app/auth/sign-up/page.tsx` | Formulario de registro (nombre + email + password) |
+| `app/account/page.tsx` | Página protegida que muestra datos del usuario |
+
+### Usar auth en Client Components
+
+```tsx
+"use client";
+import { authClient } from "@/lib/auth/client";
+
+// Hook reactivo para obtener sesión
+const { data: session, isPending } = authClient.useSession();
+
+// Sign in con email y password
+await authClient.signIn.email({ email, password, callbackURL: "/account" });
+
+// Sign up
+await authClient.signUp.email({ name, email, password, callbackURL: "/account" });
+
+// Sign out
+await authClient.signOut({
+  fetchOptions: { onSuccess: () => router.push("/") },
+});
+```
+
+### Obtener sesión en Server Components
+
+```tsx
+import { getSession } from "@/lib/auth/server-fetch";
+import { redirect } from "next/navigation";
+
+export default async function ProtectedPage() {
+  const data = await getSession();
+  if (!data?.session) { redirect("/auth/sign-in"); }
+  return <div>Hola {data.user.name}</div>;
+}
 ```
 
 ---
@@ -37,6 +94,7 @@ Usar `"use client"` SÓLO cuando el componente necesite:
 - Event handlers (`onClick`, `onChange`, etc.)
 - APIs del browser (`localStorage`, `window`, etc.)
 - Third-party libraries que requieren el browser
+- Hooks de Better Auth (`authClient.useSession()`)
 
 ```tsx
 // Server Component (default) — puede hacer async/await directo
@@ -72,7 +130,7 @@ Convención de carpetas:
 
 ---
 
-## Llamadas a la API
+## Llamadas a la API REST
 
 **Desde Server Components:**
 ```tsx
@@ -110,6 +168,7 @@ Usar siempre `@/` para imports internos:
 ```ts
 import { Button } from "@/components/ui/button";
 import { apiServer } from "@/lib/api";
+import { authClient } from "@/lib/auth/client";
 ```
 
 ---
@@ -128,5 +187,11 @@ bun run check-types  # TypeScript
 ## Variables de Entorno
 
 Ver `.env.example`.
-- `API_URL` → sólo en Server (no exponer al browser)
-- `NEXT_PUBLIC_API_URL` → accesible desde el browser
+
+| Variable | Propósito |
+|---|---|
+| `API_URL` | URL interna de la API (sólo Server Components) |
+| `NEXT_PUBLIC_API_URL` | URL pública de la API (accesible desde el browser) |
+| `DATABASE_URL` | Conexión a Neon Postgres (para Better Auth server-side) |
+| `BETTER_AUTH_SECRET` | Secret de 32+ chars para encriptación de sesiones |
+| `BETTER_AUTH_URL` | URL base del frontend (`http://localhost:3000`) |
