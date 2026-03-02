@@ -1,8 +1,50 @@
-# CLAUDE.md
+# CLAUDE.md — Orquestador del Monorepo
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este archivo guía al agente en todo cambio o implementación dentro del monorepo.
+Antes de escribir cualquier código, seguir el protocolo de decisión abajo.
 
-# Celta — Guía para Claude Code
+---
+
+## Protocolo del Agente — Qué hacer ante cada tarea
+
+### 1. Identificar el alcance del cambio
+
+| Tipo de tarea | Acción |
+|---|---|
+| Solo afecta la API (nueva ruta, controller, DB) | Leer `apps/api/CLAUDE.md` → usar skill `elysiajs` |
+| Solo afecta el frontend (nueva página, componente, UI) | Leer `apps/web/CLAUDE.md` → seguir patrones Next.js App Router |
+| Afecta ambas capas | **Implementar API primero**, luego frontend |
+| Solo configuración / paquetes compartidos | Editar en `packages/` o raíz, no crear archivos nuevos |
+
+### 2. Flujo obligatorio para nueva implementación full-stack
+
+```
+1. Leer apps/api/CLAUDE.md  →  crear model + controller + route (Elysia)
+2. Registrar ruta en apps/api/src/index.ts
+3. Si hay DB: definir schema → bun run db:generate → bun run db:migrate
+4. Leer apps/web/CLAUDE.md  →  crear página + actualizar lib/api.ts si hay endpoint nuevo
+5. Verificar tipos con bun run check-types (desde raíz)
+6. Seguir flujo de Git (ver sección abajo)
+```
+
+### 3. Skills disponibles
+
+| Skill | Cuándo usarlo |
+|---|---|
+| `elysiajs` | Siempre que se cree o modifique un recurso en `apps/api/` |
+| `neon-drizzle` | Al agregar nuevas tablas o cambiar schemas en Drizzle |
+| `neon-postgres` | Al necesitar orientación sobre Neon o conexión a la DB |
+
+**Invocar el skill antes de escribir código.** Los skills proveen contexto y patrones actualizados.
+
+### 4. Regla de sub-CLAUDE.md
+
+- **`apps/api/CLAUDE.md`** — fuente de verdad para todo lo de Elysia: routes, controllers, models, auth macros, DB, Swagger
+- **`apps/web/CLAUDE.md`** — fuente de verdad para todo lo de Next.js: páginas, componentes, auth client, apiServer/apiClient
+
+Siempre leer el sub-CLAUDE.md correspondiente antes de hacer cambios en esa app.
+
+---
 
 ## Arquitectura General
 
@@ -13,10 +55,6 @@ Monorepo con Turborepo + Bun. Dos aplicaciones principales:
 Paquetes compartidos:
 - `packages/typescript-config` — Configs de TypeScript base (base, nextjs, elysia)
 - `packages/eslint-config` — Reglas ESLint compartidas
-
-Documentación detallada:
-- `docs/architecture.md` — Diagrama de capas y responsabilidades
-- `docs/conventions.md` — Naming, patrones, manejo de errores
 
 ---
 
@@ -69,7 +107,7 @@ No hay tests configurados actualmente en el proyecto.
 
 ---
 
-## Dónde vive cada responsabilidad
+## Mapa de Responsabilidades
 
 | Responsabilidad | Ubicación |
 |---|---|
@@ -77,12 +115,11 @@ No hay tests configurados actualmente en el proyecto.
 | Componentes React | `apps/web/components/` |
 | Llamadas a la API | `apps/web/lib/api.ts` |
 | Auth client (Better Auth) | `apps/web/lib/auth/client.ts` |
-| Auth server (Better Auth) | `apps/web/lib/auth/server.ts` |
-| Auth route handler | `apps/web/app/api/auth/[...all]/route.ts` |
-| Auth middleware | `apps/web/middleware.ts` |
+| Auth server helper | `apps/web/lib/auth/server-fetch.ts` |
+| Auth middleware Next.js | `apps/web/middleware.ts` |
 | Rutas HTTP | `apps/api/src/routes/` |
 | Lógica de negocio | `apps/api/src/controllers/` |
-| Tipos y esquemas | `apps/api/src/models/` |
+| Tipos y esquemas Elysia | `apps/api/src/models/` |
 | Auth config (Better Auth) | `apps/api/src/lib/auth.ts` |
 | Auth plugin (Elysia) | `apps/api/src/middleware/auth.ts` |
 | Database connection | `apps/api/src/db/index.ts` |
@@ -96,49 +133,37 @@ No hay tests configurados actualmente en el proyecto.
 
 ## Autenticación (Better Auth)
 
-El proyecto usa **Better Auth** con email + password. La autenticación se maneja en dos lugares:
+El proyecto usa **Better Auth** con email + password. La autenticación se maneja en dos capas:
 
-### En `apps/web` (frontend):
-- **`lib/auth/server.ts`** — Instancia de Better Auth (server-side) con Drizzle adapter + `nextCookies` plugin
-- **`lib/auth/client.ts`** — Cliente React (`createAuthClient` de `better-auth/react`)
-- **`app/api/auth/[...all]/route.ts`** — Handler catch-all que monta Better Auth en Next.js
-- **`middleware.ts`** — Middleware que protege `/account/*` verificando la cookie de sesión
-
-### En `apps/api` (backend):
-- **`src/lib/auth.ts`** — Instancia de Better Auth con Drizzle adapter + email/password
+### Backend (`apps/api`):
+- **`src/lib/auth.ts`** — Instancia Better Auth con Drizzle adapter + email/password
 - **`src/middleware/auth.ts`** — Plugin Elysia que monta el handler y provee macro `auth`
+
+### Frontend (`apps/web`):
+- **`lib/auth/server-fetch.ts`** — Helper para leer sesión en Server Components delegando a Elysia
+- **`lib/auth/client.ts`** — Cliente React (`createAuthClient`) apuntando a la API en `:3001`
+- **`middleware.ts`** — Protege `/account/*` verificando la cookie de sesión
 
 ### Proteger rutas en la API:
 ```ts
-// Usar el macro `auth: true` para requerir autenticación
 app.get("/perfil", ({ user }) => ({ data: user, error: null }), {
-  auth: true,
+  auth: true, // macro del plugin auth
 });
 ```
 
 ### Obtener sesión en Server Components (Next.js):
-```ts
-import { auth } from "@/lib/auth/server";
-import { headers } from "next/headers";
-
-const session = await auth.api.getSession({ headers: await headers() });
+```tsx
+import { getSession } from "@/lib/auth/server-fetch";
+const data = await getSession();
+if (!data?.session) redirect("/auth/sign-in");
 ```
 
-### Usar auth en Client Components (React):
+### Auth en Client Components:
 ```tsx
 import { authClient } from "@/lib/auth/client";
-
-// Hook reactivo
-const { data: session, isPending } = authClient.useSession();
-
-// Sign in
-await authClient.signIn.email({ email, password });
-
-// Sign up
-await authClient.signUp.email({ name, email, password });
-
-// Sign out
-await authClient.signOut();
+const { data: session } = authClient.useSession();
+await authClient.signIn.email({ email, password, callbackURL: "/account" });
+await authClient.signOut({ fetchOptions: { onSuccess: () => router.push("/") } });
 ```
 
 ---
@@ -150,7 +175,18 @@ await authClient.signOut();
 - **Config:** `apps/api/drizzle.config.ts` — Migraciones en `./src/db/migrations`
 - **Driver:** `@neondatabase/serverless` con `drizzle-orm/neon-serverless`
 
-Better Auth crea automáticamente sus tablas (`user`, `session`, `account`, `verification`) al ejecutar `npx auth@latest generate` o `npx auth@latest migrate`.
+Better Auth crea automáticamente sus tablas (`user`, `session`, `account`, `verification`).
+
+---
+
+## Reglas de Código
+
+- TypeScript estricto en todo el proyecto — sin `any` explícito
+- Preferir `type` sobre `interface` para objetos de datos
+- Imports con alias `@/` en Next.js; paths relativos en la API
+- Respuestas API siempre con estructura `{ data: T, error: string | null, meta? }`
+- Variables de entorno desde `.env` únicamente; en Bun usar `Bun.env.VAR`
+- Commits en formato Conventional Commits con scope: `feat(web):`, `fix(api):`, `chore(root):`
 
 ---
 
@@ -159,77 +195,12 @@ Better Auth crea automáticamente sus tablas (`user`, `session`, `account`, `ver
 **Editar siempre que sea posible.** Crear archivo nuevo sólo cuando:
 - Es una nueva página/ruta en Next.js (`app/nueva-ruta/page.tsx`)
 - Es un nuevo recurso en la API (requiere route + controller + model)
-- Es un nuevo componente reutilizable
+- Es un nuevo componente reutilizable genuinamente compartido
 
 **Nunca crear:**
 - Helpers one-off — usar funciones inline
 - Archivos de configuración adicionales sin justificación clara
 - Duplicados de lógica existente
-
----
-
-## Reglas de Código
-
-- TypeScript estricto en todo el proyecto
-- Sin `any` explícito — usar `unknown` + type guards cuando sea necesario
-- Preferir `type` sobre `interface` para objetos de datos
-- Imports con alias `@/` en Next.js
-- Respuestas API siempre con estructura `{ data: T, error: string | null, meta? }`
-- Variables de entorno sólo desde `.env` (nunca hardcoded); en Bun usar `Bun.env.VAR`
-- Commits en formato Conventional Commits con scope de app: `feat(web):`, `fix(api):`, `chore(root):`, etc.
-
----
-
-## Patrones Clave
-
-### API: Esquemas de modelos
-
-Los schemas en `apps/api/src/models/` envuelven la forma completa de la respuesta (incluyendo `data` y `error`):
-
-```ts
-import { t } from "elysia";
-
-export const userResponse = t.Object({
-  data: t.Object({ id: t.String(), name: t.String() }),
-  error: t.Nullable(t.String()),
-});
-```
-
-### API: Documentación Swagger en rutas
-
-Pasar `detail` a cada handler de ruta para que aparezca en `/docs`:
-
-```ts
-userRoute.get("/", () => userController.getAll(), {
-  response: userListResponse,
-  detail: { tags: ["Users"], summary: "List all users" },
-});
-```
-
-### API: Rutas protegidas con Better Auth
-
-Usar el macro `auth: true` en las opciones del handler:
-
-```ts
-userRoute.get("/me", ({ user }) => ({ data: user, error: null }), {
-  auth: true,
-  detail: { tags: ["Users"], summary: "Get current user" },
-});
-```
-
-### API: Tipo `App` exportado
-
-`apps/api/src/index.ts` exporta `export type App = typeof app`. Este tipo puede usarse con Eden Treaty para un cliente HTTP type-safe desde `apps/web`.
-
-### Web: Clientes HTTP
-
-- `apiServer()` — Server Components y Route Handlers (usa `API_URL`)
-- `apiClient()` — Client Components (usa `NEXT_PUBLIC_API_URL`)
-- Ambos auto-prefijan `/api/v1` a todos los paths
-
-### Web: Server vs Client Components
-
-Por defecto usar Server Components (sin `"use client"`). Agregar `"use client"` sólo para `useState`, `useEffect`, event handlers, o APIs del browser.
 
 ---
 
@@ -248,7 +219,7 @@ Por defecto usar Server Components (sin `"use client"`). Agregar `"use client"` 
 |---|---|
 | `API_URL` | URL interna de la API (Server Components) |
 | `NEXT_PUBLIC_API_URL` | URL pública de la API (Client Components) |
-| `DATABASE_URL` | Conexión a Neon Postgres (para Better Auth server-side) |
+| `DATABASE_URL` | Conexión a Neon Postgres |
 | `BETTER_AUTH_SECRET` | Secret de 32+ chars para Better Auth |
 | `BETTER_AUTH_URL` | URL base del frontend (`http://localhost:3000`) |
 
@@ -272,32 +243,24 @@ Ramas permanentes:
 
 Flujo obligatorio para cada cambio:
 1. Crear rama desde `develop`: `git checkout -b feat/nombre` (o `fix/`, `chore/`)
-2. Hacer commits con scope correcto (ver Reglas de Código)
+2. Hacer commits con scope correcto
 3. Mergear a `develop` y subir: `git push origin develop`
 4. Para producción: `develop` → `main` (solo cuando esté estable)
 5. **Después de cada merge a `main`**, sincronizar `develop`:
    ```bash
-   git checkout develop
-   git merge origin/main
-   git push origin develop
+   git checkout develop && git merge origin/main && git push origin develop
    ```
-   GitHub crea un commit de merge extra en `main` al cerrar un PR. Sin este paso,
-   `develop` queda "1 behind main" y los historiales se desincronizarán con el tiempo.
-
-Scopes de commit según app:
-- `(web)` → cambios en `apps/web`
-- `(api)` → cambios en `apps/api`
-- `(root)` → cambios raíz (turbo, configs globales)
-- `(packages)` → cambios en paquetes compartidos
 
 **El agente nunca debe hacer push directo a `main`.**
 **El agente siempre debe sincronizar `develop` con `origin/main` después de un PR mergeado.**
 
 ---
 
-## Ver también
+## Referencias Especializadas
 
-- `apps/web/CLAUDE.md` — Patrones específicos de Next.js
-- `apps/api/CLAUDE.md` — Patrones específicos de Elysia (checklist para nuevo recurso)
-- `docs/architecture.md` — Diagrama completo de capas
-- `docs/conventions.md` — Convenciones de código, naming, manejo de errores
+| Documento | Contenido |
+|---|---|
+| `apps/api/CLAUDE.md` | Checklist completo para nuevo recurso Elysia, auth macros, DB, Swagger |
+| `apps/web/CLAUDE.md` | Checklist para nueva página Next.js, componentes, auth client, apiServer/apiClient |
+| `docs/architecture.md` | Diagrama completo de capas |
+| `docs/conventions.md` | Naming, manejo de errores, convenciones |
