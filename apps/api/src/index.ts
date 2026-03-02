@@ -2,14 +2,15 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { loggerMiddleware } from "./middleware/logger";
+import { authMiddleware } from "./middleware/auth";
 import { healthRoute } from "./routes/health.route";
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(Bun.env.PORT) || 3001;
 
 export const app = new Elysia()
   .use(
     cors({
-      origin: process.env.NODE_ENV === "production" ? false : true,
+      origin: Bun.env.NODE_ENV === "production" ? false : true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     })
   )
@@ -18,15 +19,25 @@ export const app = new Elysia()
       path: "/docs",
       documentation: {
         info: {
-          title: "Celta API",
+          title: "Celta API-V1",
           version: "0.1.0",
           description: "REST API for Celta",
         },
         tags: [{ name: "Health", description: "Health check endpoints" }],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "JWT",
+            },
+          },
+        },
       },
     })
   )
   .use(loggerMiddleware)
+  .use(authMiddleware)
   .group("/api/v1", (app) => app.use(healthRoute))
   .onAfterResponse(({ log, set }) => {
     if (log) {
