@@ -1,8 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Lint is run separately via `bun run lint`
-  eslint: { ignoreDuringBuilds: true },
   // Rewrites so /api/* in dev points to the Elysia API
   async rewrites() {
     return [
