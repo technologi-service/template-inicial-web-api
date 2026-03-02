@@ -1,0 +1,10 @@
+{
+  "name": "@celta/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "index.js",
+  "peerDependencies": {
+    "eslint": "^9.0.0"
+  }
+}
