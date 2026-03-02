@@ -237,22 +237,169 @@ Better Auth crea automáticamente sus tablas (`user`, `session`, `account`, `ver
 
 ## Flujo de Git
 
-Ramas permanentes:
-- `main` — producción, nunca se toca directamente
-- `develop` — rama de integración, base de todo el trabajo
+### Ramas permanentes — las únicas que existen de forma continua
 
-Flujo obligatorio para cada cambio:
-1. Crear rama desde `develop`: `git checkout -b feat/nombre` (o `fix/`, `chore/`)
-2. Hacer commits con scope correcto
-3. Mergear a `develop` y subir: `git push origin develop`
-4. Para producción: `develop` → `main` (solo cuando esté estable)
-5. **Después de cada merge a `main`**, sincronizar `develop`:
-   ```bash
-   git checkout develop && git merge origin/main && git push origin develop
-   ```
+| Rama | Propósito | Regla |
+|---|---|---|
+| `main` | Producción. Solo código estable y probado | **Nunca** commitear ni pushear directo |
+| `develop` | Integración. Base de todo el trabajo nuevo | **Nunca** commitear directo. Solo recibe merges de ramas de feature |
 
-**El agente nunca debe hacer push directo a `main`.**
-**El agente siempre debe sincronizar `develop` con `origin/main` después de un PR mergeado.**
+Las ramas de feature son **temporales**: se crean, se mergean, y se eliminan.
+
+---
+
+### Ciclo completo para cualquier cambio
+
+```
+develop (actualizado)
+   │
+   ├─► git checkout -b feat/nombre
+   │         │
+   │         │  commits...
+   │         │
+   │         ▼
+   │    git push origin feat/nombre
+   │    gh pr create --base develop
+   │         │
+   │         │  PR mergeado en GitHub
+   │         ▼
+   │    [rama feat/nombre eliminada en GitHub]
+   │
+   ▼
+develop ◄── merge del PR (GitHub)
+   │
+   │  (cuando develop esté estable y probado)
+   │
+   ▼
+gh pr create --base main   ← PR de develop → main
+   │
+   │  PR mergeado en GitHub
+   ▼
+main ◄── merge del PR
+   │
+   │  ⚠️ OBLIGATORIO: GitHub crea un merge commit en main
+   │  que develop NO tiene. Sincronizar inmediatamente:
+   ▼
+git checkout develop
+git pull origin develop
+git merge origin/main --no-edit
+git push origin develop
+```
+
+---
+
+### Paso a paso — Inicio de cualquier tarea
+
+```bash
+# 1. Asegurarse de tener develop actualizado antes de crear la rama
+git checkout develop
+git pull origin develop
+
+# 2. Crear la rama de feature desde develop
+git checkout -b feat/nombre-descriptivo
+# prefijos: feat/ fix/ chore/ docs/ refactor/
+
+# 3. Hacer commits con Conventional Commits
+git add apps/api/src/routes/post.route.ts
+git commit -m "feat(api): add posts CRUD route"
+
+# 4. Pushear la rama
+git push origin feat/nombre-descriptivo
+
+# 5. Abrir PR hacia develop (nunca hacia main directamente)
+gh pr create --base develop --title "feat: add posts resource"
+```
+
+---
+
+### Paso a paso — Después de mergear un PR a develop
+
+```bash
+# Actualizar local develop con el merge commit que GitHub creó
+git checkout develop
+git pull origin develop
+
+# Eliminar la rama local de feature (ya fue mergeada)
+git branch -d feat/nombre-descriptivo
+```
+
+---
+
+### Paso a paso — Subir develop a main (release)
+
+Solo cuando develop esté **estable y probado**:
+
+```bash
+# 1. Abrir PR de develop → main en GitHub
+gh pr create --base main --head develop --title "release: <descripción>"
+
+# 2. Mergear el PR en GitHub
+
+# 3. INMEDIATAMENTE sincronizar develop con main
+#    (GitHub crea un merge commit en main que develop no tiene)
+git checkout develop
+git pull origin develop
+git merge origin/main --no-edit
+git push origin develop
+
+# 4. Verificar que develop y main estén al mismo nivel
+git log --oneline --graph origin/main origin/develop -5
+```
+
+> **Por qué es obligatorio el paso 3:** Cuando GitHub cierra un PR,
+> crea un commit de merge en `main` que `develop` no tiene. Sin este sync,
+> `develop` quedará "1 commit behind main" indefinidamente y los historiales
+> se desincronizarán con cada release.
+
+---
+
+### Diagnóstico: cómo verificar el estado de las ramas
+
+```bash
+# Ver estado visual de todas las ramas
+git fetch --all
+git log --oneline --graph origin/main origin/develop -10
+
+# Ver cuántos commits de diferencia hay
+git rev-list --left-right --count origin/main...origin/develop
+# Salida: X Y  → X = commits solo en main, Y = commits solo en develop
+# Ideal después de sync: 0 0
+```
+
+### Recuperación: si develop quedó "behind main"
+
+```bash
+git checkout develop
+git pull origin develop
+git merge origin/main --no-edit   # trae el merge commit que falta
+git push origin develop
+```
+
+---
+
+### Reglas absolutas del agente
+
+- **NUNCA** hacer push directo a `main` o `develop`
+- **NUNCA** usar `git push --force` a menos que el usuario lo pida explícitamente
+- **SIEMPRE** crear la rama desde `develop` actualizado (`git pull origin develop` primero)
+- **SIEMPRE** sincronizar `develop` con `main` después de un PR mergeado a `main`
+- **SIEMPRE** abrir PRs con `--base develop` (feature → develop) o `--base main` (develop → main)
+- **NUNCA** abrir un PR de feature directamente a `main`
+- Eliminar ramas locales de feature después de mergear: `git branch -d feat/nombre`
+
+---
+
+### Naming de ramas y commits
+
+| Tipo | Rama | Ejemplo commit |
+|---|---|---|
+| Nueva feature | `feat/nombre` | `feat(api): add posts route` |
+| Bug fix | `fix/nombre` | `fix(web): correct auth redirect` |
+| Tarea técnica | `chore/nombre` | `chore(root): update dependencies` |
+| Documentación | `docs/nombre` | `docs(root): update architecture diagram` |
+| Refactor | `refactor/nombre` | `refactor(api): extract auth middleware` |
+
+Scopes de commit según app: `(web)`, `(api)`, `(root)`, `(packages)`
 
 ---
 
