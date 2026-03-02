@@ -150,6 +150,14 @@ Flujo obligatorio para cada cambio:
 2. Hacer commits con scope correcto (ver Reglas de Código)
 3. Mergear a `develop` y subir: `git push origin develop`
 4. Para producción: `develop` → `main` (solo cuando esté estable)
+5. **Después de cada merge a `main`**, sincronizar `develop`:
+   ```bash
+   git checkout develop
+   git merge origin/main
+   git push origin develop
+   ```
+   GitHub crea un commit de merge extra en `main` al cerrar un PR. Sin este paso,
+   `develop` queda "1 behind main" y los historiales se desincronizarán con el tiempo.
 
 Scopes de commit según app:
 - `(web)` → cambios en `apps/web`
@@ -158,6 +166,7 @@ Scopes de commit según app:
 - `(packages)` → cambios en paquetes compartidos
 
 **El agente nunca debe hacer push directo a `main`.**
+**El agente siempre debe sincronizar `develop` con `origin/main` después de un PR mergeado.**
 
 ---
 
